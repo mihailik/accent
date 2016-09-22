@@ -1,0 +1,101 @@
+<!doctype html>
+<html style="margin: 0px; padding: 0px; overflow: hidden;"><head>
+<meta charset="utf-8">
+<title>Accent</title>
+</head>
+<body>
+<script>
+
+function accent(){
+
+  var record = document.createElement('button');
+  record.onclick = function() {
+    withMedia(function (med) {
+      console.log('withMedia ', med);
+
+      var context =
+        window.AudioContext ? new AudioContext() :
+        window.webkitAudioContext ? new webkitAudioContext() :
+        window.msAudioContext ? new msAudioContext() :
+        window.oAudioContext ? new oAudioContext() :
+        window.mozAudioContext ? new mozAudioContext() :
+        null;
+
+      console.log('AudioContext ', context);
+
+      var microphone = context.createMediaStreamSource(med);
+      console.log('microphone ', microphone);
+
+      var node = context.createScriptProcessor ?
+        context.createScriptProcessor(4096, 2, 2) :
+        context.createJavaScriptNode(4096, 2, 2);
+
+      var recBuffersL = [];
+      var recBuffersR = [];
+      var sampleRate;
+      node.onaudioprocess = function(e){
+        recBuffersL.push(e.inputBuffer.getChannelData(0));
+        recBuffersR.push(e.inputBuffer.getChannelData(1));
+        sampleRate = e.inputBuffer.sampleRate;
+        record.textContent = 'Record ['+recBuffersL.length+' at '+sampleRate+']';
+      }
+
+      microphone.connect(node);
+      node.connect(context.destination);
+
+      var playButton = document.createElement('button');
+      playButton.textContent = 'Play';
+      playButton.onclick = function() {
+        //if (playButton.parentElement) playButton.parentElement.removeChild(playButton);
+        var leftSize = 0;
+        for (var i = 0; i < recBuffersL.length; i++) {
+          leftSize += recBuffersL[i].length;
+        }
+        var p = 0;
+
+        var sourceBuf = context.createBuffer(1, leftSize, sampleRate);
+        var sourceBufArr = sourceBuf.getChannelData(0);
+        for (var i = 0; i < recBuffersL.length; i++) {
+          sourceBufArr.set(recBuffersL[i], p);
+          p += recBuffersL[i].length;
+        }
+
+        //sourceBuf.getChannelData(0).set(leftBufferArr);
+        //sourceBuf.copyToChannel(leftBufferArr, 0);
+
+        var source = context.createBufferSource();
+        source.buffer = sourceBuf;
+        source.connect(context.destination);
+        source.start(0);
+      };
+      document.body.appendChild(playButton);
+
+      //var filter = context.createBiquadFilter();
+      //console.log('filter ', filter);
+
+      // microphone -> filter -> destination.
+      //microphone.connect(filter);
+      //filter.connect(context.destination);
+
+    }, function(err) {
+      console.error(err);
+    });
+  };
+  record.textContent = 'Record';
+  document.body.appendChild(record);
+
+  function withMedia(callback, errorCallback) {
+    navigator.getUserMedia ? navigator.getUserMedia({audio: true}, callback, errorCallback) :
+    navigator.webkitGetUserMedia ? navigator.webkitGetUserMedia({audio: true}, callback, errorCallback) :
+    navigator.msGetUserMedia ? navigator.msGetUserMedia({audio: true}, callback, errorCallback) :
+    navigator.oGetUserMedia ? navigator.oGetUserMedia({audio: true}, callback, errorCallback) :
+    navigator.mozGetUserMedia ? navigator.mozGetUserMedia({audio: true}, callback, errorCallback)
+    : null;
+  }
+}
+
+accent();
+
+</script>
+</body>
+</html>
