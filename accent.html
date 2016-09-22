@@ -8,18 +8,23 @@
 
 function accent(){
 
+  function createAudioContext() {
+    var context =
+      window.AudioContext ? new AudioContext() :
+      window.webkitAudioContext ? new webkitAudioContext() :
+      window.msAudioContext ? new msAudioContext() :
+      window.oAudioContext ? new oAudioContext() :
+      window.mozAudioContext ? new mozAudioContext() :
+      null;
+    return context;
+  }
+
   var record = document.createElement('button');
   record.onclick = function() {
     withMedia(function (med) {
       console.log('withMedia ', med);
 
-      var context =
-        window.AudioContext ? new AudioContext() :
-        window.webkitAudioContext ? new webkitAudioContext() :
-        window.msAudioContext ? new msAudioContext() :
-        window.oAudioContext ? new oAudioContext() :
-        window.mozAudioContext ? new mozAudioContext() :
-        null;
+      var context = createAudioContext();
 
       console.log('AudioContext ', context);
 
@@ -33,11 +38,80 @@ function accent(){
       var recBuffersL = [];
       var recBuffersR = [];
       var sampleRate;
+      var divsLeft, divsRight;
+      var maxBufferCount = 20;
+
+      var createDivs = function(right) {
+        var bg = document.createElement('div');
+        bg.style.cssText =
+          'height: 250px; '+
+          'width: 550px; '+
+          'display: inline-block; '+
+          'border: solid 2px '+(right ? 'cornflowerblue':'tomato')+';';
+        document.body.appendChild(bg);
+        var divs = [];
+        var count = 500;
+        for (var i = 0; i < count; i++) {
+          var d = document.createElement('div');
+          var varChan = Math.round(i*250/200);
+          d.style.cssText =
+            'display: inline-block; background: rgb('+(right ? '0,40,'+varChan : varChan+',40,0')+'); width: 1px;';
+          bg.appendChild(d);
+          divs.push(d);
+        }
+        return divs;
+      };
+
+      var updateDivs = function(divs, bchan) {
+        for (var i = 0; i <divs.length; i++) {
+          var offs = (i * bchan.length/divs.length)|0;
+          var len = (((i+1) * bchan.length/divs.length)|0) - offs;
+
+          var chunkStart = (i * bchan.length/divs.length)|0;
+          var chunkLen = (((i+1) * bchan.length/divs.length)|0) - chunkStart;
+
+          var min = bchan[chunkStart];
+          var max = bchan[chunkStart];
+          for (var ib=chunkStart+1; ib<chunkStart + chunkLen; ib++) {
+            min = Math.min(min, bchan[ib]);
+            max = Math.max(max, bchan[ib]);
+          }
+
+          var minPx = (min + 1)*50;
+          var maxPx = (max + 1)*50;
+
+          divs[i].style.marginTop = minPx+'px';
+          divs[i].style.height = (maxPx-minPx)+'px';
+          divs[i].style.marginBottom = (100 - minPx - maxPx)+'px';
+
+        }
+
+      };
+
       node.onaudioprocess = function(e){
-        recBuffersL.push(e.inputBuffer.getChannelData(0));
-        recBuffersR.push(e.inputBuffer.getChannelData(1));
+        var bleft = e.inputBuffer.getChannelData(0);
+        var bright = e.inputBuffer.getChannelData(1);
+
+        var bleftClone = new Float32Array(bleft.length);
+        bleftClone.set(bleft);
+        var brightClone = new Float32Array(bright.length);
+        brightClone.set(bleft);
+
+        recBuffersL.push(bleftClone);
+        recBuffersR.push(brightClone);
+        if (recBuffersL.length > maxBufferCount) recBuffersL.shift();
+        if (recBuffersR.length > maxBufferCount) recBuffersR.shift();
+
         sampleRate = e.inputBuffer.sampleRate;
-        record.textContent = 'Record ['+recBuffersL.length+' at '+sampleRate+']';
+
+
+        if (!divsLeft) divsLeft = createDivs(false);
+        if (!divsRight) divsRight = createDivs(true/*right*/);
+
+        updateDivs(divsLeft, bleft);
+        updateDivs(divsRight, bright);
+
+        //record.textContent = 'Record ['+recBuffersL.length+' at '+sampleRate+']';
       }
 
       microphone.connect(node);
@@ -46,29 +120,37 @@ function accent(){
       var playButton = document.createElement('button');
       playButton.textContent = 'Play';
       playButton.onclick = function() {
+        var playContext = context;//createAudioContext();
         //if (playButton.parentElement) playButton.parentElement.removeChild(playButton);
         var leftSize = 0;
         for (var i = 0; i < recBuffersL.length; i++) {
           leftSize += recBuffersL[i].length;
         }
-        var p = 0;
 
-        var sourceBuf = context.createBuffer(1, leftSize, sampleRate);
-        var sourceBufArr = sourceBuf.getChannelData(0);
+        var p = 0;
+        var sourceBuf = playContext.createBuffer(2, leftSize, sampleRate);
+        var leftSourceBufArr = sourceBuf.getChannelData(0);
         for (var i = 0; i < recBuffersL.length; i++) {
-          sourceBufArr.set(recBuffersL[i], p);
+          leftSourceBufArr.set(recBuffersL[i], p);
           p += recBuffersL[i].length;
+        }
+        p= 0;
+        var rightSourceBufArr = sourceBuf.getChannelData(1);
+        for (var i = 0; i < recBuffersR.length; i++) {
+          rightSourceBufArr.set(recBuffersR[i], p);
+          p += recBuffersR[i].length;
         }
 
         //sourceBuf.getChannelData(0).set(leftBufferArr);
         //sourceBuf.copyToChannel(leftBufferArr, 0);
 
-        var source = context.createBufferSource();
+        var source = playContext.createBufferSource();
         source.buffer = sourceBuf;
-        source.connect(context.destination);
+        source.connect(playContext.destination);
         source.start(0);
       };
       document.body.appendChild(playButton);
+      document.body.appendChild(document.createElement('hr'));
 
       //var filter = context.createBiquadFilter();
       //console.log('filter ', filter);
