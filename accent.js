@@ -1,11 +1,3 @@
-<!doctype html>
-<html style="margin: 0px; padding: 0px; overflow: hidden;"><head>
-<meta charset="utf-8">
-<title>Accent</title>
-</head>
-<body>
-<script>
-
 function accent(){
 
   waitForLoadAndMedia(function(media, context) {
@@ -320,8 +312,3 @@ function accent(){
 }
 
 accent();
-
-</script>
-<script src='therain.base64.js'></script>
-</body>
-</html>
