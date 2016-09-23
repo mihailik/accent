@@ -8,6 +8,52 @@
 
 function accent(){
 
+  waitForLoadAndMedia(function(media, context) {
+    document.body.parentElement.onclick = function() {
+      var startTime = Date.now();
+      console.log('playing...');
+      playClip(context, function() {
+        var endTime = Date.now();
+
+        console.log('recording...');
+        recordClip(
+          media, context, (endTime - startTime)/1000,
+          function(sourceBuf) {
+            console.log('replaying recording...');
+            playRecordingClip(context, sourceBuf, function() {
+              console.log('finished now');
+            });
+          });
+      });
+
+    };
+  }, function(error) {
+    console.error(error);
+    alert(error);
+  });
+
+  function waitForLoadAndMedia(callback, errorCallback) {
+    var loaded = typeof therain!=='undefined' && !!therain,
+        media, context;
+
+    if (!loaded) {
+      window.addEventListener('load', function() {
+        loaded = true;
+        if (loaded && media && context) {
+          callback(media, context);
+        }
+      }, false);
+    }
+
+    withMedia(function (_media, _context) {
+      media = _media;
+      context = _context;
+      if (loaded && media && context) {
+        callback(media, context);
+      }
+    }, errorCallback);
+  }
+
   function createAudioContext() {
     var context =
       window.AudioContext ? new AudioContext() :
@@ -19,8 +65,113 @@ function accent(){
     return context;
   }
 
-  var record = document.createElement('button');
-  record.onclick = function() {
+  function withMedia(successCallback, errorCallback) {
+    function callback(media) {
+      var context = createAudioContext();
+      successCallback(media, context);
+    }
+
+    navigator.getUserMedia ? navigator.getUserMedia({audio: true}, callback, errorCallback) :
+    navigator.webkitGetUserMedia ? navigator.webkitGetUserMedia({audio: true}, callback, errorCallback) :
+    navigator.msGetUserMedia ? navigator.msGetUserMedia({audio: true}, callback, errorCallback) :
+    navigator.oGetUserMedia ? navigator.oGetUserMedia({audio: true}, callback, errorCallback) :
+    navigator.mozGetUserMedia ? navigator.mozGetUserMedia({audio: true}, callback, errorCallback)
+    : null;
+  }
+
+  var stopPlaying;
+
+  function playClip(context, completeCallback) {
+    var mp3buf = getClipArrayBuffer();
+    context.decodeAudioData(
+      mp3buf,
+      function (decodedBuf) {
+        var source = context.createBufferSource();
+        source.buffer = decodedBuf; 
+        source.connect(context.destination);
+        source.onended = completeCallback;
+        source.start(0); 
+      });
+  }
+
+  function recordClip(media, context, recordingTimeSec, completeCallback) {
+    var microphone = context.createMediaStreamSource(media);
+
+    var node = context.createScriptProcessor ?
+      context.createScriptProcessor(4096, 2, 2) :
+      context.createJavaScriptNode(4096, 2, 2);
+
+    var recBuffersL = [];
+    var recBuffersR = [];
+    var llen =0, rlen =0;
+    var sampleRate;
+
+    var disconnected;
+
+    node.onaudioprocess = function(e){
+      if (disconnected) return;
+      var bleft = e.inputBuffer.getChannelData(0);
+      var bright = e.inputBuffer.getChannelData(1);
+      llen += bleft.length;
+      rlen += bright.length;
+      sampleRate = e.inputBuffer.sampleRate;
+
+      var bleftClone = new Float32Array(bleft.length);
+      bleftClone.set(bleft);
+      var brightClone = new Float32Array(bright.length);
+      brightClone.set(bleft);
+
+      recBuffersL.push(bleftClone);
+      recBuffersR.push(brightClone);
+    };
+
+    microphone.connect(node);
+    node.connect(context.destination);
+
+    setTimeout(function() {
+      microphone.disconnect(node);
+      node.disconnect(context.destination);
+      disconnected = true;
+
+      var p = 0;
+      var sourceBuf = context.createBuffer(2, Math.max(llen, rlen), sampleRate);
+      var leftSourceBufArr = sourceBuf.getChannelData(0);
+      for (var i = 0; i < recBuffersL.length; i++) {
+        leftSourceBufArr.set(recBuffersL[i], p);
+        p += recBuffersL[i].length;
+      }
+      p= 0;
+      var rightSourceBufArr = sourceBuf.getChannelData(1);
+      for (var i = 0; i < recBuffersR.length; i++) {
+        rightSourceBufArr.set(recBuffersR[i], p);
+        p += recBuffersR[i].length;
+      }
+
+      completeCallback(sourceBuf);
+    }, recordingTimeSec*1000);
+
+  }
+
+  function playRecordingClip(context, sourceBuf, completeCallback) {
+    var source = context.createBufferSource();
+    source.buffer = sourceBuf;
+    source.connect(context.destination);
+    source.start(0);
+    source.onended = completeCallback;
+  }
+
+  function getClipArrayBuffer() {
+    var base64 = therain();
+    var binary_string =  window.atob(base64);
+    var len = binary_string.length;
+    var bytes = new Uint8Array( len );
+    for (var i = 0; i < len; i++)        {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  var oldRecordClick = function() {
     withMedia(function (med) {
       console.log('withMedia ', med);
 
@@ -163,21 +314,14 @@ function accent(){
       console.error(err);
     });
   };
-  record.textContent = 'Record';
-  document.body.appendChild(record);
+  //record.textContent = 'Record';
+  //document.body.appendChild(record);
 
-  function withMedia(callback, errorCallback) {
-    navigator.getUserMedia ? navigator.getUserMedia({audio: true}, callback, errorCallback) :
-    navigator.webkitGetUserMedia ? navigator.webkitGetUserMedia({audio: true}, callback, errorCallback) :
-    navigator.msGetUserMedia ? navigator.msGetUserMedia({audio: true}, callback, errorCallback) :
-    navigator.oGetUserMedia ? navigator.oGetUserMedia({audio: true}, callback, errorCallback) :
-    navigator.mozGetUserMedia ? navigator.mozGetUserMedia({audio: true}, callback, errorCallback)
-    : null;
-  }
 }
 
 accent();
 
 </script>
+<script src='therain.base64.js'></script>
 </body>
 </html>
