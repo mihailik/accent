@@ -1,5 +1,47 @@
 function accent(){
 
+  var getUserMedia =
+    navigator.getUserMedia || navigator.webkitGetUserMedia  ||
+    navigator.msGetUserMedia || navigator.mozGetUserMedia || navigator.oGetUserMedia;
+  var AudioContext =
+    window.AudioContext || window.webkitAudioContext ||
+    window.msAudioContext || window.mozAudioContext || window.oAudioContext;
+
+  function playRecordReplayExperience() {
+    var experience = {
+      start: start_initial,
+      stop: function() { if (stopAction) stopAction(); } ,
+      onerror: null,
+      onplaying: null,
+      onrecording: null,
+      onreplaying: null
+    };
+
+    var stopAction;
+
+    return experience;
+
+    function start_initial() {
+      if (stopAction) stopAction();
+      var stopped;
+      stopAction = function() { stopped = true; };
+
+      getUserMedia(function(media) {
+        if (stopped) return;
+        // TODO: play the clip
+      }, function(error) {
+        stopAction = null;
+        stopped = true;
+        if (experience.onerror) experience.onerror(error, 'getUserMedia');
+      });
+    }
+
+    function start_loaded() {
+      if (stopAction) stopAction();
+      // TODO: getUserMedia
+    }
+  }
+
   waitForLoadAndMedia(function(media, context) {
     document.body.parentElement.onclick = function() {
       var startTime = Date.now();
@@ -13,6 +55,7 @@ function accent(){
           function(sourceBuf) {
             console.log('replaying recording...');
             playRecordingClip(context, sourceBuf, function() {
+              media, context;
               console.log('finished now');
             });
           });
@@ -40,10 +83,35 @@ function accent(){
     withMedia(function (_media, _context) {
       media = _media;
       context = _context;
+      stopMedia(_media);
+
       if (loaded && media && context) {
         callback(media, context);
       }
     }, errorCallback);
+  }
+
+  function stopMedia(_media) {
+    if (_media.stop)
+      _media.stop();
+    if (_media.getTracks) {
+      var tracks = _media.getTracks();
+      for (var i = 0; i < tracks.length; i++) {
+        if (tracks[i].stop) tracks[i].stop();
+      }
+    }
+    if (_media.getAudioTracks) {
+      var tracks = _media.getAudioTracks();
+      for (var i = 0; i < tracks.length; i++) {
+        if (tracks[i].stop) tracks[i].stop();
+      }
+    }
+    if (_media.getVideoTracks) {
+      var tracks = _media.getVideoTracks();
+      for (var i = 0; i < tracks.length; i++) {
+        if (tracks[i].stop) tracks[i].stop();
+      }
+    }
   }
 
   function createAudioContext() {
@@ -68,7 +136,7 @@ function accent(){
     navigator.msGetUserMedia ? navigator.msGetUserMedia({audio: true}, callback, errorCallback) :
     navigator.oGetUserMedia ? navigator.oGetUserMedia({audio: true}, callback, errorCallback) :
     navigator.mozGetUserMedia ? navigator.mozGetUserMedia({audio: true}, callback, errorCallback)
-    : null;
+    : errorCallback(new Error('Media is not accessible.'));
   }
 
   var stopPlaying;
