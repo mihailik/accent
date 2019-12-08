@@ -1,0 +1,16 @@
+{
+  "name": "accent",
+  "version": "0.1.0",
+  "description": "Accent training app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "tpck": "^0.1.3",
+    "typescript": "^3.7.3"
+  }
+}
